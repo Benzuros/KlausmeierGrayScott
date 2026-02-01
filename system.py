@@ -39,20 +39,18 @@ class System:
             v[n] = self.v[n]
 
         for n in tqdm(range(len(t) - 1)):
-            for i in range(1, len(self.y) - 1):
-                for j in range(1, len(self.x) - 1):
-                    u[n + 1, i, j] = (u[n, i, j] + self.d1 * self.ht / self.h**2 * (u[n, i, j + 1] + u[n, i, j - 1]
-                        + u[n, i + 1, j] + u[n, i - 1, j] - 4 * u[n, i, j])
-                        + self.ht * (self.a - u[n, i, j] + u[n, i, j] * v[n, i, j]**2))
-                    v[n + 1, i, j] = (v[n, i, j] + self.d2 * self.ht / self.h**2 * (v[n, i, j + 1] + v[n, i, j - 1]
-                        + v[n, i + 1, j] + v[n, i - 1, j] - 4 * v[n, i, j])
-                        + self.ht * (u[n, i, j] * v[n, i, j]**2 - self.m * v[n, i, j]))
-            for i in range(1, len(self.y) - 1):
-                u[n + 1, i, 0] = v[n + 1, i, 0] = 0
-                u[n + 1, i, len(self.x) - 1] = v[n + 1, i, len(self.x) - 1] = 0
-            for j in range(len(self.x)):
-                u[n + 1, 0, j] = v[n + 1, 0, j] = 0
-                u[n + 1, len(self.y) - 1, j] = v[n + 1, len(self.y) - 1, j] = 0
+            #interior
+            u[n + 1, 1:-1, 1:-1] = (u[n, 1:-1, 1:-1] + self.d1 * self.ht / self.h**2 * (u[n, 1:-1, 2:] + u[n, 1:-1, :-2]
+                + u[n, 2:, 1:-1] + u[n, :-2, 1:-1] - 4 * u[n, 1:-1, 1:-1])
+                + self.ht * (self.a - u[n, 1:-1, 1:-1] + u[n, 1:-1, 1:-1] * v[n, 1:-1, 1:-1]**2))
+            v[n + 1, 1:-1, 1:-1] = (v[n, 1:-1, 1:-1] + self.d1 * self.ht / self.h**2 * (v[n, 1:-1, 2:] + v[n, 1:-1, :-2]
+                + v[n, 2:, 1:-1] + v[n, :-2, 1:-1] - 4 * v[n, 1:-1, 1:-1])
+                + self.ht * (u[n, 1:-1, 1:-1] * v[n, 1:-1, 1:-1]**2 - self.m * v[n, 1:-1, 1:-1]))
+            #boundary
+            u[n + 1, 1:-1, 0] = v[n + 1, 1:-1, 0] = np.zeros(len(self.y) - 2)
+            u[n + 1, 1:-1, len(self.x) - 1] = v[n + 1, 1:-1, len(self.x) - 1] = np.zeros(len(self.y) - 2)
+            u[n + 1, 0, :] = v[n + 1, 0, :] = np.zeros(len(self.x))
+            u[n + 1, len(self.y) - 1, :] = v[n + 1, len(self.y) - 1, :] = np.zeros(len(self.x))
 
         self.current_time = time
         self.u = u
