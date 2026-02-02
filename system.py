@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.sparse import diags_array, eye_array, kron
-from scipy.sparse.linalg import spsolve
+from scipy.sparse.linalg import spsolve, factorized
 from matplotlib.animation import FuncAnimation
 from tqdm import tqdm
 
@@ -54,6 +54,11 @@ class System:
         au = eye_array(lap.shape[0]) - self.ht * self.d1 * lap
         av = eye_array(lap.shape[0]) - self.ht * self.d2 * lap
 
+        # LU decomposition
+        solve_u = factorized(au)
+        solve_v = factorized(av)
+
+
 
         for n in tqdm(range(nt - 1)):
             u_n = u[n]
@@ -68,8 +73,8 @@ class System:
             rhs_v = v_n[1:-1, 1:-1].ravel() + self.ht * rv.ravel()
 
             # diffusion (implicit)
-            u_new = spsolve(au, rhs_u)
-            v_new = spsolve(av, rhs_v)
+            u_new = solve_u(rhs_u)
+            v_new = solve_v(rhs_v)
 
             # add solution
             u[n + 1, 1:-1, 1:-1] = u_new.reshape((ny - 2, nx - 2))
