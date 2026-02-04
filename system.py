@@ -137,7 +137,7 @@ class System:
             print(f"max: {v_max:.3f}, mean: {v_mean:.3f}")
 
         while np.linalg.norm(self.v[-1] - self.v[-2]) >= tolerance:
-            v_max, v_mean = self.simulate(step)
+            v_max, v_mean = self.simulate(step, extend)
             i += 1
             if log:
                 print(f"max: {v_max:.3f}, mean: {v_mean:.3f}")
@@ -210,6 +210,7 @@ class System:
 
         pt = ax.imshow(p, origin="lower", cmap=cm, extent=(0, self.xmax, 0, self.ymax))
         cb = fig.colorbar(pt)
+        ax.set_title(f"$a$ = {self.a:.2f}, $m$ = {self.m:.2f}")
 
         return pt, cb
 
@@ -231,7 +232,7 @@ class System:
 
         def update(frame):
             pt.set_data(p[frame])
-            txt.set_text(f"$t = {frame/len(p) * self.current_time :.1f}$")
+            txt.set_text(f"$t = {frame/len(p) * self.current_time :n}$")
             return pt, txt
 
         anim = FuncAnimation(fig, update, frames=len(p), interval=10, blit=True)
@@ -242,15 +243,14 @@ class System:
 
 
 if __name__ == '__main__':
-    A = 1.2
-    uu = lambda x, y: A
+    uu = lambda x, y: 1.2
     vv = lambda x, y: np.random.rand()
 
-    S = System(20, 20, 0.1, 0.02, 10, 0.1, 0.45, A, uu, vv)
+    S = System(20, 20, 0.1, 0.1, 10, 0.1, 0.4, 1.2, uu, vv)
+    S.simulate_until_stable(100, log=True, extend=False)
     Fig, Ax = plt.subplots()
-    S.simulate_until_stable(10, log=True)
     S.plot(fig=Fig, ax=Ax)
-    Fig, Ax = plt.subplots()
-    anim = S.animate(fig=Fig, ax=Ax)
+    # Fig, Ax = plt.subplots()
+    # ani = S.animate(fig=Fig, ax=Ax)
 
     plt.show()
