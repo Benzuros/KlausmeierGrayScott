@@ -8,6 +8,17 @@ from tqdm import tqdm
 
 class System:
     def __init__(self, xmax, ymax, h, ht, d1, d2, m, a, u0, v0):
+        """Initialize a system object on the domain [0, xmax] x [0, ymax] with grid step h, time step ht,
+        parameters d1, d2, m, a and initial conditions given by the functions u0 and v0."""
+        if xmax <= 0:
+            raise ValueError("Length xmax must be positive.")
+        if ymax <= 0:
+            raise ValueError("Length ymax must be positive.")
+        if h <= 0:
+            raise ValueError("Step h must be positive.")
+        if ht <= 0:
+            raise ValueError("Step ht must be positive.")
+
         self.xmax = xmax
         self.ymax = ymax
         self.h = h
@@ -55,11 +66,26 @@ class System:
 
 
     def clear_history(self):
-        """Clear the history of the system. u and v will now only consist of their current state (u[-1], v[-1])."""
+        """Clear the history of the system: Set self.current_time to 0 and truncate self.u and self.v to
+        only their current state (u[-1], v[-1])."""
         self.u = self.u[-1:, :, :]
         self.v = self.v[-1:, :, :]
         self.current_time = 0
 
+
+    def change_state(self, u0, v0):
+        """Clear the history and change the current state matrices u[-1] and v[-1] to u0 and v0 respectively.
+        The new matrices must have the same shape as the current ones."""
+        if self.u[-1].shape != u0.shape:
+            raise ValueError(f"The matrix u0 must have the same shape as \
+                             self.u[-1] {self.u[-1].shape}, but has shape {u0.shape}.")
+        if self.v[-1].shape != v0.shape:
+            raise ValueError(f"The matrix v0 must have the same shape as \
+                             self.v[-1] {self.v[-1].shape}, but has shape {v0.shape}.")
+
+        self.clear_history()
+        self.u[-1] = u0
+        self.v[-1] = v0
 
 
     def simulate(self, time, extend=False):
@@ -69,6 +95,9 @@ class System:
         Extend self.u and self.v and self.current_time by the results
         (useful for analyzing the evolution of the system over multiple calls of this method).
         Return the max and mean of v[-1]."""
+        if time <= 0:
+            raise ValueError("Simulation time must be positive.")
+
         t = np.arange(0, time + self.ht, self.ht)
         nt, nx, ny = len(t), len(self.x), len(self.y)
         u = np.zeros((nt, ny, nx))
@@ -125,7 +154,7 @@ class System:
         return np.max(self.v[-1]), np.mean(self.v[-1])
 
 
-    def simulate_until_stable(self, step, tolerance=0.001, log=False, extend=True):
+    def simulate_until_stable(self, step, tolerance=0.01, log=False, extend=True):
         """Repeatedly call self.simulate(step, extend) until the Frobenius (L^(2,2)) norm of
         v[-1] - v[-2] is less than tolerance.
         If log is True, print the current mean and max of v after every iteration and the total number of iterations
@@ -134,23 +163,23 @@ class System:
         i = 1
         v_max, v_mean = self.simulate(step, extend)
         if log:
-            print(f"max: {v_max:.3f}, mean: {v_mean:.3f}")
+            print(f"max: {v_max:.2f}, mean: {v_mean:.2f}")
 
         while np.linalg.norm(self.v[-1] - self.v[-2]) >= tolerance:
             v_max, v_mean = self.simulate(step, extend)
             i += 1
             if log:
-                print(f"max: {v_max:.3f}, mean: {v_mean:.3f}")
+                print(f"max: {v_max:.2f}, mean: {v_mean:.2f}")
 
         if log:
             print(f"Reached stability after {i} iterations.")
-            print(f"Current max  of v: {v_max:.3f}")
-            print(f"Current mean of v: {v_mean:.3f}")
+            print(f"Current max  of v: {v_max:.2f}")
+            print(f"Current mean of v: {v_mean:.2f}")
 
-        return v_max, v_mean
+        return v_max, v_mean, i
 
 
-    def bifurcation_diagram(self, a_step, t_step, tolerance=0.001, log=False, ax=None):
+    def bifurcation_diagram(self, a_step, t_step, tolerance=0.01, log=False, ax=None):
         """Compute the bifurcation diagram of the system using numerical continuation.
         Return two lists: max and mean, consisting of tuples (a, max) and (a, mean) respectively.
         If ax is given, plot both max and mean as a scatter plot on ax."""
@@ -161,7 +190,7 @@ class System:
         v_st = np.array([])
 
         while a > 0:
-            ma, me = self.simulate_until_stable(t_step, tolerance, log, extend=False)
+            ma, me, _ = self.simulate_until_stable(t_step, tolerance, log, extend=False)
             if ma >= tolerance:
                 u_st = self.u[-1]
                 v_st = self.v[-1]
@@ -170,10 +199,10 @@ class System:
             self.change_parameters(a = a - a_step)
             a = self.a
             if log:
-                print(f"a = {a}")
+                print(f"a = {a:.2f}")
 
         while a <= a_old:
-            ma, me = self.simulate_until_stable(t_step, tolerance, log, extend=False)
+            ma, me, _ = self.simulate_until_stable(t_step, tolerance, log, extend=False)
             if ma < tolerance:
                 self.u[-1] = u_st
                 self.v[-1] = v_st
@@ -185,14 +214,52 @@ class System:
             self.change_parameters(a = a + a_step)
             a = self.a
             if log:
-                print(f"a = {a}")
+                print(f"a = {a:.2f}")
 
         if ax:
             ax.set(xlabel="$a$", ylabel="stationary states $v^*$")
-            ax.scatter(*zip(*maxs), color="blue", label="max($v^*$)")
-            ax.scatter(*zip(*means), color="red", label="mean($v^*$)")
+            ax.plot(*zip(*maxs), marker="o", color="blue", label="max($v^*$)")
+            ax.plot(*zip(*means), marker="o", color="red", label="mean($v^*$)")
 
         return maxs, means
+
+
+    def error(self, time, until_stable, tolerance=0.01, fig=None, ax=None):
+        original_state = self.u, self.v, self.current_time
+        s = System(self.xmax, self.ymax, self.h, self.ht/2, self.d1, self.d2,
+                   self.m, self.a, lambda x, y: 0, lambda x, y: 0)
+        self.clear_history()
+        s.change_state(self.u[-1], self.v[-1])
+
+        if until_stable:
+            ext = ax is not None
+            _, _, n = self.simulate_until_stable(time, tolerance, extend=ext)
+            time *= n
+            s.simulate(time)
+        else:
+            self.simulate(time)
+            s.simulate(time)
+
+        error = np.max(np.abs(self.u[-1] - s.u[-1])), np.max(np.abs(self.v[-1] - s.v[-1]))
+
+        if ax is not None:
+            ax0, ax1, ax2, ax3 = ax
+            t = np.arange(0, time + self.ht, self.ht)
+            ax0.set(xlabel="$t$", ylabel="error")
+            err_u = np.max(np.abs(self.u - s.u[::2]), axis=(1, 2))
+            err_v = np.max(np.abs(self.v - s.v[::2]), axis=(1, 2))
+            ax0.plot(t, err_u, color="blue", label="u")
+            ax0.plot(t, err_v, color="green", label="v")
+            ax0.legend()
+            self.plot(fig, ax=ax2)
+            s.plot(fig, ax=ax3)
+            pt = ax1.imshow(np.abs(self.v[-1] - s.v[-1]), origin="lower", extent=(0, self.xmax, 0, self.ymax))
+            cb = fig.colorbar(pt)
+
+
+        self.u, self.v, self.current_time = original_state
+
+        return error
 
 
     def plot(self, fig, ax, t=-1, u=False):
@@ -243,14 +310,17 @@ class System:
 
 
 if __name__ == '__main__':
-    uu = lambda x, y: 1.2
+    A = 1.25
+    uu = lambda x, y: A
     vv = lambda x, y: np.random.rand()
 
-    S = System(20, 20, 0.1, 0.1, 10, 0.1, 0.4, 1.2, uu, vv)
-    S.simulate_until_stable(100, log=True, extend=False)
-    Fig, Ax = plt.subplots()
-    S.plot(fig=Fig, ax=Ax)
-    # Fig, Ax = plt.subplots()
-    # ani = S.animate(fig=Fig, ax=Ax)
+    S = System(100, 100, 0.5, 0.02, 10, 0.1, 0.45, A, uu, vv)
+    S.simulate_until_stable(50, log=True, extend=True, tolerance=0.01)
+    #Fig, Ax = plt.subplots()
+    #Fig, ((Ax0, Ax1), (Ax2, Ax3)) = plt.subplots(ncols=2, nrows=2)
+    #S.simulate(100)
+    #S.bifurcation_diagram(0.5, 100, ax = Ax)
+    #ani = S.animate(fig=Fig, ax=Ax)
+    #print(S.error(100, until_stable=True, fig=Fig, ax=(Ax0, Ax1, Ax2, Ax3), tolerance=0.01))
 
     plt.show()
