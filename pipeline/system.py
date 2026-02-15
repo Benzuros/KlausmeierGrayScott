@@ -154,32 +154,31 @@ class System:
         return np.max(self.v[-1]), np.mean(self.v[-1])
 
 
-    def simulate_until_stable(self, step, tolerance=0.01, log=False, extend=True):
-        """Repeatedly call self.simulate(step, extend) until the Frobenius (L^(2,2)) norm of
-        v[-1] - v[-2] is less than tolerance.
+    def simulate_until_stable(self, step, tolerance=0.001, log=False, extend=True):
+        """Repeatedly call self.simulate(step, extend) until the max of |v[-1] - v[-2]| is less than tolerance.
         If log is True, print the current mean and max of v after every iteration and the total number of iterations
         at the end. Note that extend is True by default.
         If extend is False, u and v will only cover the last iteration."""
         i = 1
         v_max, v_mean = self.simulate(step, extend)
         if log:
-            print(f"max: {v_max:.2f}, mean: {v_mean:.2f}")
+            print(f"max: {v_max:.3f}, mean: {v_mean:.3f}")
 
-        while np.linalg.norm(self.v[-1] - self.v[-2]) >= tolerance:
+        while np.max(np.abs(self.v[-1] - self.v[-2])) >= tolerance:
             v_max, v_mean = self.simulate(step, extend)
             i += 1
             if log:
-                print(f"max: {v_max:.2f}, mean: {v_mean:.2f}")
+                print(f"max: {v_max:.3f}, mean: {v_mean:.3f}")
 
         if log:
             print(f"Reached stability after {i} iterations.")
-            print(f"Current max  of v: {v_max:.2f}")
-            print(f"Current mean of v: {v_mean:.2f}")
+            print(f"Current max  of v: {v_max:.3f}")
+            print(f"Current mean of v: {v_mean:.3f}")
 
         return v_max, v_mean, i
 
 
-    def bifurcation_diagram(self, a_step, t_step, tolerance=0.01, log=False, ax=None):
+    def bifurcation_diagram(self, a_step, t_step, tolerance=0.001, log=False, ax=None):
         """Compute the bifurcation diagram of the system using numerical continuation.
         Return two lists: max and mean, consisting of tuples (a, max) and (a, mean) respectively.
         If ax is given, plot both max and mean as a scatter plot on ax."""
@@ -224,7 +223,7 @@ class System:
         return maxs, means
 
 
-    def error(self, time, until_stable, tolerance=0.01, fig=None, ax=None):
+    def error(self, time, until_stable, tolerance=0.001, fig=None, ax=None):
         original_state = self.u, self.v, self.current_time
         s = System(self.xmax, self.ymax, self.h, self.ht/2, self.d1, self.d2,
                    self.m, self.a, lambda x, y: 0, lambda x, y: 0)
@@ -240,19 +239,20 @@ class System:
             self.simulate(time)
             s.simulate(time)
 
-        error = np.max(np.abs(self.u[-1] - s.u[-1])), np.max(np.abs(self.v[-1] - s.v[-1]))
+        error = np.max(np.abs(self.v[-1] - s.v[-1])), np.mean(np.abs(self.v[-1] - s.v[-1]))
 
         if ax is not None:
             ax0, ax1, ax2, ax3 = ax
             t = np.arange(0, time + self.ht, self.ht)
-            ax0.set(xlabel="$t$", ylabel="error")
-            err_u = np.max(np.abs(self.u - s.u[::2]), axis=(1, 2))
-            err_v = np.max(np.abs(self.v - s.v[::2]), axis=(1, 2))
-            ax0.plot(t, err_u, color="blue", label="u")
-            ax0.plot(t, err_v, color="green", label="v")
+            ax0.set(xlabel="$t$", ylabel="error", title="Max and mean error")
+            err_ma = np.max(np.abs(self.v - s.v[::2]), axis=(1, 2))
+            err_me = np.mean(np.abs(self.v - s.v[::2]), axis=(1, 2))
+            ax0.plot(t, err_ma, color="blue", label="max")
+            ax0.plot(t, err_me, color="red", label="mean")
             ax0.legend()
             self.plot(fig, ax=ax2)
             s.plot(fig, ax=ax3)
+            ax1.set(title="Error heatmap", xlabel="$x$", ylabel="$y$")
             pt = ax1.imshow(np.abs(self.v[-1] - s.v[-1]), origin="lower", extent=(0, self.xmax, 0, self.ymax))
             cb = fig.colorbar(pt)
 
@@ -263,7 +263,7 @@ class System:
 
 
     def plot(self, fig, ax, t=-1, u=False):
-        """Plot v[t // ht] on axes ax. If u is True, plot u[t // ht] instead."""
+        """Plot a heatmap of v[t // ht] on axes ax. If u is True, plot u[t // ht] instead."""
         if t == -1:
             n = -1
         else:
@@ -277,7 +277,7 @@ class System:
 
         pt = ax.imshow(p, origin="lower", cmap=cm, extent=(0, self.xmax, 0, self.ymax))
         cb = fig.colorbar(pt)
-        ax.set_title(f"$a$ = {self.a:.2f}, $m$ = {self.m:.2f}")
+        ax.set(title=f"$a$ = {self.a:.2f}, $m$ = {self.m:.2f}", xlabel="$x$", ylabel="$y$")
 
         return pt, cb
 
@@ -310,17 +310,17 @@ class System:
 
 
 if __name__ == '__main__':
-    A = 1.25
+    A = 1.1
     uu = lambda x, y: A
     vv = lambda x, y: np.random.rand()
 
-    S = System(100, 100, 0.5, 0.02, 10, 0.1, 0.45, A, uu, vv)
-    S.simulate_until_stable(50, log=True, extend=True, tolerance=0.01)
-    #Fig, Ax = plt.subplots()
-    #Fig, ((Ax0, Ax1), (Ax2, Ax3)) = plt.subplots(ncols=2, nrows=2)
-    #S.simulate(100)
+    S = System(100, 100, 0.5, 0.05, 10, 0.1, 0.4, A, uu, vv)
+    S.simulate_until_stable(50, log=True, extend=False)
+    Fig, Ax = plt.subplots()
+    S.plot(fig=Fig, ax=Ax)
     #S.bifurcation_diagram(0.5, 100, ax = Ax)
     #ani = S.animate(fig=Fig, ax=Ax)
-    #print(S.error(100, until_stable=True, fig=Fig, ax=(Ax0, Ax1, Ax2, Ax3), tolerance=0.01))
+    #Fig, ((Ax0, Ax1), (Ax2, Ax3)) = plt.subplots(ncols=2, nrows=2)
+    #print(S.error(50, until_stable=True, fig=Fig, ax=(Ax0, Ax1, Ax2, Ax3)))
 
     plt.show()
